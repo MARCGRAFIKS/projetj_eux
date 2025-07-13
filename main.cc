@@ -37,6 +37,41 @@ class Texture {
 	int t_height;
 };
 
+// classe de timer
+class LTimer {
+	public:
+	LTimer();
+	void start();
+    void stop();
+	void pause();
+	void unpause();
+	Uint32 getTicks();
+	bool isStarted();
+	bool isPaused();
+
+	private:
+	Uint32 startTicks;
+	Uint32 pausedTicks;
+	bool paused;
+	bool started;
+};
+
+// classe de dot
+class Dot {
+	public:
+	static const int DOT_WIDTH = 20;
+	static const int DOT_HEIGHT = 20;
+	static const int DOT_VEL = 640;
+
+	Dot(); 
+	void handLeEvent(SDL_Event& e);
+	void move(float timeStep);
+	void render();
+	private:
+	float posX, posY;
+	float velX, velY;
+};
+
 // base de dataStream
 class DataDtream {
 	public:
@@ -60,6 +95,7 @@ void close();
 SDL_Window* win = NULL;
 SDL_Renderer* rend = NULL;
 Texture tex;
+Texture tex2;
 DataDtream dataStream;
 
 Texture::Texture() {
@@ -295,6 +331,115 @@ void* DataDtream::getBuffer() {
 	return image[currentImage]->pixels;
 }
 
+LTimer::LTimer() {
+   startTicks = 0;
+   pausedTicks = 0;
+
+   paused = false;
+   started = false;
+}
+	
+void LTimer::start() {
+   started = true;
+   paused = false;
+   startTicks = SDL_GetTicks();
+   pausedTicks = 0;
+}
+    
+void LTimer::stop() {
+   started = false;
+   paused = false;
+   startTicks = 0;
+   pausedTicks = 0;
+}
+	
+void LTimer::pause() {
+  if(started && !paused) {
+	paused = true;
+
+	pausedTicks = SDL_GetTicks() - startTicks;
+	startTicks = 0;
+  }
+}
+	
+void LTimer::unpause() {
+	if(started && paused) {
+		paused = false;
+		startTicks = SDL_GetTicks() - pausedTicks;
+		pausedTicks = 0;
+	}
+
+}
+	
+Uint32 LTimer::getTicks() {
+   Uint32 time = 0;
+   if(started) {
+	  if(paused) {
+	    	time = pausedTicks;
+	    }else {
+	    	time = SDL_GetTicks() - startTicks;
+    	}
+   }
+   return time;
+}
+	
+bool LTimer::isStarted() {
+	return started;
+
+}
+	
+bool LTimer::isPaused() {
+  return paused && started;
+}
+
+Dot::Dot() {
+ posX = 0;
+ posY= 0;
+ velX = 0;
+ velY = 0;
+}
+	
+void Dot::handLeEvent(SDL_Event& e) {
+   if(e.type == SDL_KEYDOWN && e.key.repeat == 0) {
+      switch(e.key.keysym.sym) {
+		case SDLK_UP: velY -= DOT_VEL; break;
+		case SDLK_DOWN: velY += DOT_VEL; break;
+		case SDLK_LEFT: velX -= DOT_VEL; break;
+		case SDLK_RIGHT: velX += DOT_VEL; break;
+	  }
+   }else
+    if(e.type == SDL_KEYUP && e.key.repeat == 0) {
+      switch(e.key.keysym.sym) {
+		case SDLK_UP: velY += DOT_VEL; break;
+		case SDLK_DOWN: velY -= DOT_VEL; break;
+		case SDLK_LEFT: velX += DOT_VEL; break;
+		case SDLK_RIGHT: velX -= DOT_VEL; break;
+	  }
+   }
+}
+	 
+void Dot::move(float timeStep) {
+  posX += velX * timeStep;
+  if(posX < 0) {
+	posX = 0;
+  }else
+  if(posX >SCREEN_WIDTH - DOT_WIDTH) {
+	posX = SCREEN_WIDTH - DOT_WIDTH;
+  }
+
+  posY += velY * timeStep;
+  if(posY < 0) {
+	posY = 0;
+  }else
+  if(posY >SCREEN_HEIGHT - DOT_HEIGHT) {
+	posY = SCREEN_HEIGHT - DOT_HEIGHT;
+  }
+}
+	
+void Dot::render() {
+   tex2.render((int)posX, (int)posY);
+}
+
 bool init(){
    bool success = true;
    if(SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -347,12 +492,17 @@ bool loadMedia() {
 	 printf("èchouer to load stream\n");
 	 success = false;
    }
+   if(!tex2.loadFile("foto/dot.bmp")) {
+	printf("Load tex2 failed\n");
+	success = false;
+   }
    return success;
 }
 
 void close() {
    tex.free();
    dataStream.free();
+   tex2.free();
 
    SDL_DestroyRenderer(rend);
    SDL_DestroyWindow(win);
@@ -371,12 +521,18 @@ int main(int argc, char* argv[]) {
 		} else {
 			bool run = false;
 			SDL_Event e;
+			Dot dot;
+			LTimer setpTimer;
 			while(!run) {
 				while(SDL_PollEvent(&e)) {
 					if(e.type == SDL_QUIT) {
 						run = true;
 					}
+					dot.handLeEvent(e);
 				}
+				float timeStep = setpTimer.getTicks()/1000.f;
+				dot.move(timeStep);
+				setpTimer.start();
 				SDL_SetRenderDrawColor(rend, 0xFF, 0xFF, 0xFF, 0xFF);
 				SDL_RenderClear(rend);
 
@@ -385,6 +541,7 @@ int main(int argc, char* argv[]) {
                 tex.unlockTexture();
 
 				tex.render((SCREEN_WIDTH-tex.getWidth())/2, (SCREEN_HEIGHT-tex.getHeight())/2);
+				dot.render();
 				SDL_RenderPresent(rend);
 			}
 		}
